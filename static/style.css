@@ -1,0 +1,201 @@
+/* Custom styles for MCP Client application */
+
+/* Main container improvements */
+.main .block-container {
+    padding-top: 2rem;
+    padding-bottom: 2rem;
+}
+
+/* Custom metrics styling */
+div[data-testid="metric-container"] {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Chart container styling */
+.chart-container {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* File upload area styling */
+div[data-testid="stFileUploader"] {
+    border: 2px dashed #ff6b6b;
+    border-radius: 10px;
+    padding: 2rem;
+    text-align: center;
+    background-color: rgba(255, 107, 107, 0.05);
+}
+
+div[data-testid="stFileUploader"]:hover {
+    border-color: #ff5252;
+    background-color: rgba(255, 107, 107, 0.1);
+}
+
+/* Success/error message styling */
+.stSuccess {
+    background-color: rgba(76, 175, 80, 0.1);
+    border-left: 4px solid #4CAF50;
+    padding: 1rem;
+    border-radius: 4px;
+}
+
+.stError {
+    background-color: rgba(244, 67, 54, 0.1);
+    border-left: 4px solid #f44336;
+    padding: 1rem;
+    border-radius: 4px;
+}
+
+.stWarning {
+    background-color: rgba(255, 152, 0, 0.1);
+    border-left: 4px solid #ff9800;
+    padding: 1rem;
+    border-radius: 4px;
+}
+
+/* Chat message styling */
+.chat-message {
+    padding: 1rem;
+    margin: 0.5rem 0;
+    border-radius: 8px;
+}
+
+.chat-message.user {
+    background-color: rgba(33, 150, 243, 0.1);
+    border-left: 4px solid #2196F3;
+}
+
+.chat-message.assistant {
+    background-color: rgba(76, 175, 80, 0.1);
+    border-left: 4px solid #4CAF50;
+}
+
+/* Button styling improvements */
+.stButton > button {
+    border-radius: 6px;
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+.stButton > button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* Primary button styling */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(45deg, #ff6b6b, #ff8e53);
+    border: none;
+    color: white;
+}
+
+.stButton > button[kind="primary"]:hover {
+    background: linear-gradient(45deg, #ff5252, #ff7043);
+}
+
+/* Sidebar styling */
+.css-1d391kg {
+    background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Expander styling */
+.streamlit-expanderHeader {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* DataFrame styling */
+div[data-testid="stDataFrame"] {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Tab styling */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 8px 8px 0 0;
+    padding-left: 16px;
+    padding-right: 16px;
+}
+
+/* Loading spinner customization */
+.stSpinner {
+    text-align: center;
+}
+
+.stSpinner > div {
+    border-color: #ff6b6b transparent #ff6b6b transparent;
+}
+
+/* Code block styling */
+.stCode {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+}
+
+/* Info box styling */
+.stInfo {
+    background-color: rgba(33, 150, 243, 0.1);
+    border-left: 4px solid #2196F3;
+    padding: 1rem;
+    border-radius: 4px;
+}
+
+/* Custom classes for special elements */
+.status-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-connected {
+    background-color: #4CAF50;
+}
+
+.status-disconnected {
+    background-color: #f44336;
+}
+
+.status-warning {
+    background-color: #ff9800;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .main .block-container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    
+    div[data-testid="stFileUploader"] {
+        padding: 1rem;
+    }
+}
+
+/* Dark mode specific adjustments */
+@media (prefers-color-scheme: dark) {
+    .chart-container {
+        background-color: #1e1e1e;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    
+    div[data-testid="metric-container"] {
+        background-color: rgba(255, 255, 255, 0.02);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+}
