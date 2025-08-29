@@ -294,15 +294,12 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [OpenAI](https://openai.com/) for GPT models
 - [Model Context Protocol](https://github.com/anthropics/mcp) for tool orchestration
 - [Pandas](https://pandas.pydata.org/) for data manipulation
+- Woo Yan Kit for the emotional ~~support~~ damage
 
 ## 📧 Contact
 
-For questions or support, please open an issue on GitHub or contact the maintainers.
+For questions or support, please open an issue on GitHub or contact Huawei Woo Yan Kit.
 
 ---
 
 **Note:** This is an active project under development. Features and APIs may change.
-=======
-# streamlit-pandas-mcp-client
-An OpenAI based streamlit client in the web (note needs the OpenAI API KEY)
->>>>>>> d48037707745d85594c77c29446233c7efc1c09a
