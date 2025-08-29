@@ -4,6 +4,9 @@ __pycache__/
 *$py.class
 *.so
 .Python
+env/
+venv/
+ENV/
 build/
 develop-eggs/
 dist/
@@ -19,54 +22,32 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
-# Virtual Environment
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+# Streamlit
+.streamlit/secrets.toml
+*.log
 
-# IDEs
+# Project specific
+logs/
+temp/
+*.db
+*.sqlite
+
+# IDE
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Streamlit
-.streamlit/
-
-# Temporary files
-temp/
-tmp/
-*.tmp
-*.temp
-
-# Charts (cleared on restart)
-static/charts/*
-!static/charts/.gitkeep
-
-# Logs
-*.log
-logs/
+# Environment
+.env
+.env.local
 
 # OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# UV
-.python-version
-
-# Test
-.pytest_cache/
-.coverage
-htmlcov/
+# Cache
+.cache/
+*.cache
