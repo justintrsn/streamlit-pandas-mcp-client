@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # 🐼 Pandas Data Chat - Streamlit MCP Client
 
 A powerful, AI-powered data analysis assistant that combines Streamlit, OpenAI, and Model Context Protocol (MCP) to provide natural language data analysis capabilities.
@@ -301,3 +302,7 @@ For questions or support, please open an issue on GitHub or contact the maintain
 ---
 
 **Note:** This is an active project under development. Features and APIs may change.
+=======
+# streamlit-pandas-mcp-client
+An OpenAI based streamlit client in the web (note needs the OpenAI API KEY)
+>>>>>>> d48037707745d85594c77c29446233c7efc1c09a
