@@ -4,7 +4,7 @@ import streamlit as st
 import os
 from pathlib import Path
 from typing import Optional
-from datetime import datetime
+from datetime import datetime  # Fix: Move this import to the top
 from config import get_settings, get_prompt_manager
 from utils import get_logger, clear_async_cache, run_async
 from core import MCPClient
@@ -48,7 +48,6 @@ def render_connection_config():
     if st.session_state.get('mcp_tools'):
         st.success(f"✅ Connected ({len(st.session_state.mcp_tools)} tools)")
         if st.session_state.get('mcp_connected_at'):
-            from datetime import datetime
             connected_at = datetime.fromisoformat(st.session_state.mcp_connected_at)
             duration = (datetime.now() - connected_at).seconds
             if duration < 60:
@@ -142,8 +141,6 @@ def render_connection_config():
         options=[
             "gpt-4o-mini", 
             "gpt-4o", 
-            "gpt-5-main",
-            "gpt-5-thinking",
             "gpt-4-turbo",
             "gpt-3.5-turbo"
         ],
