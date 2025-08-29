@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pandas Data Chat - Streamlit app with MCP integration
+Pandas Data Chat - Main Chat Interface
 """
 
 import streamlit as st
@@ -13,12 +13,7 @@ from config import get_settings, get_prompt_manager
 from core import MCPClient, OpenAIHandler, SessionManager
 
 # Import components
-from components import (
-    render_sidebar,
-    render_chat_interface,
-    render_file_manager,
-    render_connection_status
-)
+from components import render_sidebar, render_chat_interface
 
 # Import utilities
 from utils import get_logger, ChartHandler, run_async
@@ -29,7 +24,7 @@ logger = get_logger()
 
 # Page configuration
 st.set_page_config(
-    page_title=settings.app_title,
+    page_title="Chat - " + settings.app_title,
     page_icon=settings.app_icon,
     layout=settings.app_layout,
     initial_sidebar_state=settings.sidebar_state
@@ -49,52 +44,27 @@ chart_handler = ChartHandler()
 
 # Main app
 def main():
-    """Main application entry point"""
+    """Main chat interface"""
     
     # Title
-    st.title(f"{settings.app_icon} {settings.app_title}")
+    st.title(f"{settings.app_icon} {settings.app_title} - Chat")
     
-    # Top bar with connection status
-    render_connection_status()
+    # Check connection status
+    if not session_manager.is_connected():
+        st.warning("⚠️ MCP server not connected. Please connect in the sidebar to start.")
     
-    # Connect to MCP if not connected
-    if not session_manager.is_connected() and not st.session_state.get('mcp_tools'):
-        if st.button("Connect to MCP Server", type="primary"):
-            with st.spinner("Connecting..."):
-                try:
-                    tools = run_async(mcp_client.connect())
-                    session_manager.set_tools(tools)
-                    st.success(f"Connected! {len(tools)} tools available.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Connection failed: {str(e)}")
-                    logger.log("error", f"MCP connection failed: {str(e)}")
+    # Chat interface
+    is_ready = render_chat_interface()
     
-    # Main layout
-    col1, col2 = st.columns([2, 1])
-    
-    # Chat interface (left column)
-    with col1:
-        is_ready = render_chat_interface()
-    
-    # File manager (right column)
-    with col2:
-        render_file_manager()
-    
-    # Sidebar
+    # Sidebar (includes MCP connection)
     render_sidebar()
-    
-    # Display current chart if selected
-    if session_manager.get('current_chart_index') is not None:
-        with col1:
-            chart_handler.display_current_chart()
     
     # Chat input (must be at root level due to Streamlit constraints)
     if prompt := st.chat_input("Ask about your data...", disabled=not is_ready):
-        handle_user_input(prompt, col1)
+        handle_user_input(prompt)
 
 
-def handle_user_input(prompt: str, display_column):
+def handle_user_input(prompt: str):
     """Handle user input and process with OpenAI/MCP"""
     
     # Validate state
@@ -110,14 +80,12 @@ def handle_user_input(prompt: str, display_column):
     session_manager.add_message("user", prompt)
     
     # Display user message
-    with display_column:
-        with st.chat_message("user"):
-            st.write(prompt)
+    with st.chat_message("user"):
+        st.write(prompt)
     
     # Process with OpenAI
-    with display_column:
-        with st.chat_message("assistant"):
-            process_assistant_response(prompt)
+    with st.chat_message("assistant"):
+        process_assistant_response(prompt)
 
 
 def process_assistant_response(user_prompt: str):
@@ -158,6 +126,10 @@ def process_assistant_response(user_prompt: str):
             response,
             {"chart_indices": chart_indices} if chart_indices else None
         )
+        
+        # Show link to charts if any were created
+        if chart_indices:
+            st.info(f"📊 {len(chart_indices)} chart(s) created. View them in the [Charts page](Charts)")
         
     except Exception as e:
         error_msg = f"Error processing request: {str(e)}"
