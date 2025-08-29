@@ -1,240 +1,328 @@
-"""
-utils/logger.py - Comprehensive logging utility for MCP Client
-Save this as utils/logger.py
-"""
+"""Logging configuration for pandas-chat-app"""
 
 import logging
+import json
 import sys
 from pathlib import Path
 from datetime import datetime
-import json
-from typing import Optional, Dict, Any
-import traceback
+from typing import Dict, Any, Optional
+from logging.handlers import RotatingFileHandler
+import streamlit as st
 
-class MCPClientLogger:
-    """Custom logger for MCP Client with file and console output."""
+
+class AppLogger:
+    """Centralized logging system with file and Streamlit handlers"""
     
-    def __init__(self, name: str = "mcp_client", log_dir: str = "logs"):
+    def __init__(
+        self,
+        name: str = "pandas_chat",
+        log_dir: str = "logs",
+        app_log_file: str = "app.log",
+        mcp_log_file: str = "mcp_calls.log",
+        log_level: str = "INFO",
+        max_bytes: int = 10_485_760,  # 10MB
+        backup_count: int = 5
+    ):
         self.name = name
         self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(exist_ok=True)
+        self.log_dir.mkdir(parents=True, exist_ok=True)
         
-        # Create logger
-        self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
-        
-        # Remove existing handlers
-        self.logger.handlers = []
-        
-        # Create formatters
-        detailed_formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+        # Main app logger
+        self.logger = self._setup_logger(
+            f"{name}.app",
+            self.log_dir / app_log_file,
+            log_level,
+            max_bytes,
+            backup_count
         )
         
-        simple_formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s',
-            datefmt='%H:%M:%S'
+        # MCP calls logger (separate for detailed tool tracking)
+        self.mcp_logger = self._setup_logger(
+            f"{name}.mcp",
+            self.log_dir / mcp_log_file,
+            log_level,
+            max_bytes,
+            backup_count,
+            detailed=True
         )
         
-        # File handler for all logs
-        log_file = self.log_dir / f"mcp_client_{datetime.now().strftime('%Y%m%d')}.log"
-        file_handler = logging.FileHandler(log_file, encoding='utf-8')
-        file_handler.setLevel(logging.DEBUG)
-        file_handler.setFormatter(detailed_formatter)
-        self.logger.addHandler(file_handler)
+        # Store recent logs for UI display
+        self.recent_logs = []
+        self.max_recent = 100
         
-        # File handler for errors only
-        error_file = self.log_dir / f"mcp_errors_{datetime.now().strftime('%Y%m%d')}.log"
-        error_handler = logging.FileHandler(error_file, encoding='utf-8')
-        error_handler.setLevel(logging.ERROR)
-        error_handler.setFormatter(detailed_formatter)
-        self.logger.addHandler(error_handler)
+    def _setup_logger(
+        self,
+        logger_name: str,
+        log_file: Path,
+        level: str,
+        max_bytes: int,
+        backup_count: int,
+        detailed: bool = False
+    ) -> logging.Logger:
+        """Setup individual logger with handlers"""
         
-        # Console handler
-        console_handler = logging.StreamHandler(sys.stdout)
-        console_handler.setLevel(logging.INFO)
-        console_handler.setFormatter(simple_formatter)
-        self.logger.addHandler(console_handler)
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(getattr(logging, level.upper()))
         
-        # Connection log file for detailed connection debugging
-        self.connection_log = self.log_dir / f"connection_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        # Clear existing handlers
+        logger.handlers = []
         
-        self.logger.info(f"Logger initialized. Logs directory: {self.log_dir.absolute()}")
-    
-    def log_connection_attempt(self, url: str, method: str = "connect"):
-        """Log a connection attempt with details."""
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "method": method,
-            "url": url,
-            "event": "connection_attempt"
-        }
+        # File handler with rotation
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=max_bytes,
+            backupCount=backup_count
+        )
         
-        self.logger.info(f"Attempting connection to {url} using {method}")
-        
-        # Write to connection log
-        with open(self.connection_log, 'a') as f:
-            f.write(json.dumps(log_entry) + '\n')
-    
-    def log_connection_response(self, url: str, status_code: Optional[int] = None, 
-                               error: Optional[str] = None, success: bool = False):
-        """Log connection response details."""
-        log_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "url": url,
-            "status_code": status_code,
-            "error": error,
-            "success": success,
-            "event": "connection_response"
-        }
-        
-        if success:
-            self.logger.info(f"Successfully connected to {url} (Status: {status_code})")
+        # Format based on detail level
+        if detailed:
+            formatter = logging.Formatter(
+                '%(asctime)s | %(levelname)-8s | %(funcName)-20s | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
         else:
-            self.logger.error(f"Connection failed to {url} - Error: {error} (Status: {status_code})")
+            formatter = logging.Formatter(
+                '%(asctime)s | %(levelname)-8s | %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
         
-        # Write to connection log
-        with open(self.connection_log, 'a') as f:
-            f.write(json.dumps(log_entry) + '\n')
+        file_handler.setFormatter(formatter)
+        logger.addHandler(file_handler)
+        
+        # Console handler for development
+        if sys.stdout.isatty():
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_formatter = logging.Formatter(
+                '%(levelname)-8s | %(message)s'
+            )
+            console_handler.setFormatter(console_formatter)
+            console_handler.setLevel(logging.DEBUG)
+            logger.addHandler(console_handler)
+        
+        return logger
     
-    def log_tool_call(self, tool_name: str, params: Dict[str, Any], result: Optional[Any] = None, 
-                     error: Optional[str] = None):
-        """Log MCP tool calls."""
-        # Don't log sensitive data
-        safe_params = self._sanitize_params(params)
+    def log(
+        self,
+        level: str,
+        message: str,
+        extra: Optional[Dict[str, Any]] = None
+    ):
+        """General logging method"""
+        log_method = getattr(self.logger, level.lower())
         
-        if error:
-            self.logger.error(f"Tool call failed: {tool_name} - Error: {error}")
-            self.logger.debug(f"Parameters: {safe_params}")
-        else:
-            self.logger.debug(f"Tool call successful: {tool_name}")
-            self.logger.debug(f"Parameters: {safe_params}")
-    
-    def log_exception(self, exception: Exception, context: str = ""):
-        """Log exceptions with full traceback."""
-        error_msg = f"Exception in {context}: {str(exception)}"
-        self.logger.error(error_msg)
-        self.logger.debug(f"Traceback:\n{traceback.format_exc()}")
+        # Add extra data if provided
+        if extra:
+            message = f"{message} | {json.dumps(extra, default=str)}"
         
-        # Write detailed error to connection log
-        error_entry = {
-            "timestamp": datetime.now().isoformat(),
-            "event": "exception",
-            "context": context,
-            "error": str(exception),
-            "type": type(exception).__name__,
-            "traceback": traceback.format_exc()
-        }
+        log_method(message)
         
-        with open(self.connection_log, 'a') as f:
-            f.write(json.dumps(error_entry) + '\n')
-    
-    def log_session_state(self, session_state: Dict[str, Any]):
-        """Log current session state for debugging."""
-        safe_state = {
-            "mcp_connected": session_state.get("mcp_connected", False),
-            "uploaded_files_count": len(session_state.get("uploaded_files", {})),
-            "loaded_dataframes_count": len(session_state.get("loaded_dataframes", {})),
-            "generated_charts_count": len(session_state.get("generated_charts", {})),
-            "has_api_key": bool(session_state.get("openai_api_key", ""))
-        }
+        # Store in recent logs
+        self._add_recent(level.upper(), message)
         
-        self.logger.debug(f"Session state: {safe_state}")
-    
-    def log_network_details(self, url: str):
-        """Log network details for debugging connectivity."""
-        import socket
-        from urllib.parse import urlparse
+    def log_mcp_call(
+        self,
+        tool_name: str,
+        arguments: Dict[str, Any],
+        result: Any,
+        duration_ms: float,
+        success: bool = True,
+        error: Optional[str] = None
+    ):
+        """Log MCP tool calls with detailed info"""
         
-        parsed = urlparse(url)
-        hostname = parsed.hostname
-        port = parsed.port or 80
-        
-        details = {
-            "timestamp": datetime.now().isoformat(),
-            "url": url,
-            "hostname": hostname,
-            "port": port,
-            "event": "network_check"
-        }
-        
-        # Try to resolve hostname
-        try:
-            ip_address = socket.gethostbyname(hostname)
-            details["ip_address"] = ip_address
-            self.logger.info(f"Resolved {hostname} to {ip_address}")
-        except socket.gaierror as e:
-            details["dns_error"] = str(e)
-            self.logger.error(f"DNS resolution failed for {hostname}: {e}")
-        
-        # Test socket connection
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5)
-            result = sock.connect_ex((hostname, port))
-            sock.close()
+        # Truncate large content
+        display_args = arguments.copy()
+        if "content" in display_args:
+            display_args["content"] = f"<{len(str(arguments['content']))} chars>"
+        if "html_content" in display_args:
+            display_args["html_content"] = f"<{len(str(arguments['html_content']))} chars>"
             
-            if result == 0:
-                details["socket_connection"] = "success"
-                self.logger.info(f"Socket connection successful to {hostname}:{port}")
-            else:
-                details["socket_connection"] = f"failed_code_{result}"
-                self.logger.error(f"Socket connection failed to {hostname}:{port} (Error code: {result})")
-        except Exception as e:
-            details["socket_error"] = str(e)
-            self.logger.error(f"Socket test failed: {e}")
+        log_data = {
+            "tool": tool_name,
+            "args": display_args,
+            "duration_ms": duration_ms,
+            "success": success,
+            "timestamp": datetime.now().isoformat()
+        }
         
-        # Write to connection log
-        with open(self.connection_log, 'a') as f:
-            f.write(json.dumps(details) + '\n')
-    
-    def _sanitize_params(self, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Remove sensitive data from parameters before logging."""
-        safe_params = {}
-        for key, value in params.items():
-            if key.lower() in ['api_key', 'password', 'token', 'secret', 'openai_api_key']:
-                safe_params[key] = "***REDACTED***"
-            elif key == 'file_content' and isinstance(value, str) and len(value) > 100:
-                safe_params[key] = f"<binary_data_{len(value)}_chars>"
+        if not success and error:
+            log_data["error"] = error
+            
+        # Truncate result for logging
+        if isinstance(result, str) and len(result) > 500:
+            log_data["result"] = result[:500] + "...<truncated>"
+        elif isinstance(result, dict):
+            if "html_content" in result:
+                result_copy = result.copy()
+                result_copy["html_content"] = f"<{len(result['html_content'])} chars>"
+                log_data["result"] = result_copy
             else:
-                safe_params[key] = value
-        return safe_params
-    
-    def get_recent_logs(self, lines: int = 50) -> str:
-        """Get recent log entries for display."""
-        log_file = self.log_dir / f"mcp_client_{datetime.now().strftime('%Y%m%d')}.log"
-        if log_file.exists():
-            with open(log_file, 'r') as f:
-                all_lines = f.readlines()
-                return ''.join(all_lines[-lines:])
-        return "No logs found for today."
-    
-    def get_connection_logs(self) -> str:
-        """Get connection-specific logs."""
-        if self.connection_log.exists():
-            with open(self.connection_log, 'r') as f:
-                return f.read()
-        return "No connection logs found."
+                log_data["result"] = result
+        else:
+            log_data["result"] = result
+            
+        # Log to MCP logger
+        if success:
+            self.mcp_logger.info(f"Tool: {tool_name} | {json.dumps(log_data, default=str)}")
+        else:
+            self.mcp_logger.error(f"Tool: {tool_name} | {json.dumps(log_data, default=str)}")
+            
+        # Store for UI display
+        self._add_recent("MCP", json.dumps(log_data, default=str))
+        
+        # Update Streamlit session state if available
+        try:
+            if "tool_logs" not in st.session_state:
+                st.session_state.tool_logs = []
+            st.session_state.tool_logs.append(log_data)
+            
+            # Keep only last 50 in session
+            if len(st.session_state.tool_logs) > 50:
+                st.session_state.tool_logs = st.session_state.tool_logs[-50:]
+        except:
+            pass  # Session state not available
+            
+    def log_file_operation(
+        self,
+        operation: str,
+        filename: str,
+        size_bytes: Optional[int] = None,
+        success: bool = True,
+        error: Optional[str] = None
+    ):
+        """Log file upload/processing operations"""
+        
+        log_data = {
+            "operation": operation,
+            "filename": filename,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if size_bytes:
+            log_data["size_kb"] = round(size_bytes / 1024, 2)
+            
+        if not success and error:
+            log_data["error"] = error
+            
+        level = "info" if success else "error"
+        self.log(level, f"File {operation}: {filename}", log_data)
+        
+    def log_openai_call(
+        self,
+        messages_count: int,
+        tools_count: int,
+        model: str,
+        response_time_ms: float,
+        tokens_used: Optional[Dict[str, int]] = None
+    ):
+        """Log OpenAI API calls"""
+        
+        log_data = {
+            "model": model,
+            "messages": messages_count,
+            "tools": tools_count,
+            "response_ms": response_time_ms,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if tokens_used:
+            log_data["tokens"] = tokens_used
+            
+        self.log("info", f"OpenAI API call to {model}", log_data)
+        
+    def log_chart_creation(
+        self,
+        chart_type: str,
+        dataframe: str,
+        filepath: str,
+        metadata: Optional[Dict[str, Any]] = None
+    ):
+        """Log chart generation events"""
+        
+        log_data = {
+            "chart_type": chart_type,
+            "dataframe": dataframe,
+            "filepath": filepath,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        if metadata:
+            log_data["metadata"] = metadata
+            
+        self.log("info", f"Chart created: {chart_type} for {dataframe}", log_data)
+        self._add_recent("CHART", f"{chart_type} created for {dataframe}")
+        
+    def _add_recent(self, level: str, message: str):
+        """Add to recent logs buffer"""
+        entry = {
+            "timestamp": datetime.now().strftime("%H:%M:%S"),
+            "level": level,
+            "message": message[:200]  # Truncate for display
+        }
+        
+        self.recent_logs.append(entry)
+        if len(self.recent_logs) > self.max_recent:
+            self.recent_logs.pop(0)
+            
+    def get_recent_logs(
+        self,
+        count: int = 20,
+        level_filter: Optional[str] = None
+    ) -> list:
+        """Get recent log entries for UI display"""
+        
+        logs = self.recent_logs[-count:]
+        
+        if level_filter:
+            logs = [l for l in logs if l["level"] == level_filter.upper()]
+            
+        return logs
+        
+    def clear_recent(self):
+        """Clear recent logs buffer"""
+        self.recent_logs = []
+        
+    def get_log_stats(self) -> Dict[str, Any]:
+        """Get logging statistics"""
+        
+        log_counts = {}
+        for log in self.recent_logs:
+            level = log["level"]
+            log_counts[level] = log_counts.get(level, 0) + 1
+            
+        # Get file sizes
+        app_log = self.log_dir / "app.log"
+        mcp_log = self.log_dir / "mcp_calls.log"
+        
+        stats = {
+            "recent_counts": log_counts,
+            "total_recent": len(self.recent_logs),
+            "app_log_size_kb": round(app_log.stat().st_size / 1024, 2) if app_log.exists() else 0,
+            "mcp_log_size_kb": round(mcp_log.stat().st_size / 1024, 2) if mcp_log.exists() else 0,
+        }
+        
+        return stats
+
 
 # Global logger instance
-logger = MCPClientLogger()
+_logger = None
 
-# Convenience functions
-def log_info(message: str):
-    logger.logger.info(message)
 
-def log_error(message: str):
-    logger.logger.error(message)
-
-def log_debug(message: str):
-    logger.logger.debug(message)
-
-def log_warning(message: str):
-    logger.logger.warning(message)
-
-def log_connection(url: str, success: bool, error: Optional[str] = None, status_code: Optional[int] = None):
-    logger.log_connection_response(url, status_code, error, success)
-
-def log_exception(e: Exception, context: str = ""):
-    logger.log_exception(e, context)
+def get_logger() -> AppLogger:
+    """Get or create the global logger instance"""
+    global _logger
+    
+    if _logger is None:
+        # Get settings from environment or use defaults
+        import os
+        
+        log_level = os.getenv("LOG_LEVEL", "INFO")
+        log_dir = os.getenv("LOG_DIR", "logs")
+        
+        _logger = AppLogger(
+            name="pandas_chat",
+            log_dir=log_dir,
+            log_level=log_level
+        )
+        
+    return _logger

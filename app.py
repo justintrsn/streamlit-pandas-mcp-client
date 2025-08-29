@@ -1,249 +1,172 @@
-"""Main Streamlit application for MCP Data Analysis Client."""
+#!/usr/bin/env python3
+"""
+Pandas Data Chat - Streamlit app with MCP integration
+"""
 
 import streamlit as st
-from streamlit_option_menu import option_menu
-import time
 from pathlib import Path
 
-# Import our components
-from config.settings import settings
-from utils.session_state import initialize_session_state, cleanup_on_session_end
-from utils.security import secure_api_key_input, display_security_warning, check_api_key_status
-from components.mcp_client import display_connection_status, test_mcp_connection
-from components.file_manager import file_manager
-from components.chart_display import chart_display
-from components.chat_interface import chat_interface
+# Import configuration
+from config import get_settings, get_prompt_manager
 
-def configure_page():
-    """Configure Streamlit page settings."""
-    st.set_page_config(
-        page_title=settings.PAGE_TITLE,
-        page_icon=settings.PAGE_ICON,
-        layout=settings.LAYOUT,
-        initial_sidebar_state="expanded"
-    )
-    
-    # Add custom CSS
-    try:
-        css_file = settings.STATIC_DIR / "style.css"
-        if css_file.exists():
-            with open(css_file) as f:
-                st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
-    except Exception:
-        pass  # CSS is optional
+# Import core modules
+from core import MCPClient, OpenAIHandler, SessionManager
 
-def render_sidebar():
-    """Render the application sidebar."""
-    with st.sidebar:
-        st.title("🎛️ Control Panel")
-        
-        # API Key Configuration
-        secure_api_key_input()
-        
-        st.divider()
-        
-        # MCP Server Status - Updated section
-        st.markdown("### 🔗 Server Connection")
-        
-        # Import proper connection functions
-        from components.mcp_client import establish_mcp_connection
-        
-        if st.session_state.get("mcp_connected", False):
-            st.success("✅ Connected")
-            if st.button("🔄 Reconnect", key="sidebar_reconnect"):
-                with st.spinner("Reconnecting..."):
-                    if establish_mcp_connection():
-                        st.rerun()
-        else:
-            st.error("❌ Not Connected")
-            if st.button("🔗 Connect Now", key="sidebar_connect"):
-                with st.spinner("Connecting..."):
-                    if establish_mcp_connection():
-                        st.success("Connected!")
-                        st.rerun()
-                    else:
-                        st.error("Connection failed")
-        
-        st.divider()
-        
-        # Security info
-        display_security_warning()
+# Import components
+from components import (
+    render_sidebar,
+    render_chat_interface,
+    render_file_manager,
+    render_connection_status
+)
 
-def render_main_navigation():
-    """Render main navigation menu."""
-    selected = option_menu(
-        menu_title=None,
-        options=["📊 Data Analysis", "💬 Chat Assistant", "📁 File Manager"],
-        icons=["graph-up", "chat-dots", "folder"],
-        menu_icon="cast",
-        default_index=0,
-        orientation="horizontal",
-        styles={
-            "container": {"padding": "0!important", "background-color": "transparent"},
-            "icon": {"color": "#ff6b6b", "font-size": "18px"},
-            "nav-link": {
-                "font-size": "16px",
-                "text-align": "center",
-                "margin": "0px",
-                "--hover-color": "#f0f0f0",
-            },
-            "nav-link-selected": {"background-color": "#ff6b6b"},
-        },
-    )
-    
-    return selected
+# Import utilities
+from utils import get_logger, ChartHandler, run_async
 
-def render_data_analysis_page():
-    """Render the data analysis page."""
-    st.title("📊 Data Analysis Dashboard")
-    
-    # Check prerequisites
-    if not check_api_key_status():
-        st.warning("🔑 Configure your OpenAI API key in the sidebar to unlock all features")
-    
-    # Check MCP connection - use establish function instead of just checking
-    if not st.session_state.get("mcp_connected", False):
-        st.warning("🔗 Connect to MCP server to start analyzing data")
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🔗 Connect to MCP Server", type="primary"):
-                from components.mcp_client import establish_mcp_connection
-                with st.spinner("Connecting to MCP server..."):
-                    if establish_mcp_connection():
-                        st.success("✅ Connected successfully!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Connection failed. Please check if the server is running.")
-        with col2:
-            if st.button("🔄 Retry Connection"):
-                st.rerun()
-        return
-    
-    # Main content tabs
-    tab1, tab2, tab3 = st.tabs(["📂 File Upload", "📊 Charts", "📋 DataFrames"])
-    
-    with tab1:
-        file_manager.render_file_uploader()
-        st.divider()
-        file_manager.render_session_summary()
-    
-    with tab2:
-        chart_display.render_chart_builder()
-        st.divider()
-        chart_display.render_generated_charts()
-    
-    with tab3:
-        file_manager.render_dataframe_list()
-        
-        # Quick visualizations for loaded DataFrames
-        if st.session_state.loaded_dataframes:
-            st.divider()
-            df_name = st.selectbox(
-                "Quick Visualizations for:", 
-                list(st.session_state.loaded_dataframes.keys()),
-                key="quick_viz_select"
-            )
-            if df_name:
-                chart_display.render_quick_visualizations(df_name)
+# Initialize settings and logger
+settings = get_settings()
+logger = get_logger()
 
-def render_chat_page():
-    """Render the chat assistant page."""
-    st.title("💬 Data Analysis Assistant")
-    
-    # Check prerequisites
-    if not check_api_key_status():
-        st.error("🔑 Please configure your OpenAI API key in the sidebar to use the chat feature")
-        return
-    
-    if not st.session_state.get("mcp_connected", False):
-        st.warning("🔗 Connect to MCP server for enhanced data operations")
-    
-    # Main chat interface
-    chat_interface.render_chat_interface()
-    
-    # Suggested questions
-    if st.session_state.loaded_dataframes:
-        st.divider()
-        chat_interface.render_suggested_questions()
+# Page configuration
+st.set_page_config(
+    page_title=settings.app_title,
+    page_icon=settings.app_icon,
+    layout=settings.app_layout,
+    initial_sidebar_state=settings.sidebar_state
+)
 
-def render_file_manager_page():
-    """Render the file manager page."""
-    st.title("📁 File Management")
-    
-    if not st.session_state.get("mcp_connected", False):
-        st.warning("🔗 Please connect to MCP server first")
-        return
-    
-    # File operations
-    tab1, tab2 = st.tabs(["📤 Upload Files", "📋 Manage Files"])
-    
-    with tab1:
-        file_manager.render_file_uploader()
-    
-    with tab2:
-        file_manager.render_file_list()
-        
-        st.divider()
-        
-        # Bulk operations
-        st.subheader("🔧 Bulk Operations")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            if st.button("📊 Load All as DataFrames", type="secondary"):
-                _load_all_dataframes()
-        
-        with col2:
-            if st.button("🧹 Clear All Files", type="secondary"):
-                if st.confirm("Delete all uploaded files?"):
-                    file_manager._clear_all_data()
+# Initialize core modules
+@st.cache_resource
+def init_core_modules():
+    """Initialize core modules (cached across reruns)"""
+    mcp_client = MCPClient()
+    openai_handler = OpenAIHandler(mcp_client)
+    return mcp_client, openai_handler
 
-def _load_all_dataframes():
-    """Load all uploaded files as DataFrames."""
-    try:
-        for file_name in st.session_state.uploaded_files:
-            if not st.session_state.uploaded_files[file_name].get("dataframe_loaded"):
-                file_manager._load_dataframe(file_name)
-        st.success("✅ All files loaded as DataFrames")
-    except Exception as e:
-        st.error(f"Error loading DataFrames: {e}")
+mcp_client, openai_handler = init_core_modules()
+session_manager = SessionManager()
+chart_handler = ChartHandler()
 
+# Main app
 def main():
-    """Main application function."""
-    # Configure page
-    configure_page()
+    """Main application entry point"""
     
-    # Initialize session state
-    initialize_session_state()
+    # Title
+    st.title(f"{settings.app_icon} {settings.app_title}")
     
-    # Register cleanup
-    cleanup_on_session_end()
+    # Top bar with connection status
+    render_connection_status()
     
-    # Update timestamp for session tracking
-    st.session_state.timestamp = time.time()
+    # Connect to MCP if not connected
+    if not session_manager.is_connected() and not st.session_state.get('mcp_tools'):
+        if st.button("Connect to MCP Server", type="primary"):
+            with st.spinner("Connecting..."):
+                try:
+                    tools = run_async(mcp_client.connect())
+                    session_manager.set_tools(tools)
+                    st.success(f"Connected! {len(tools)} tools available.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Connection failed: {str(e)}")
+                    logger.log("error", f"MCP connection failed: {str(e)}")
     
-    # Ensure directories exist
-    settings.ensure_directories()
+    # Main layout
+    col1, col2 = st.columns([2, 1])
     
-    # Render sidebar
+    # Chat interface (left column)
+    with col1:
+        is_ready = render_chat_interface()
+    
+    # File manager (right column)
+    with col2:
+        render_file_manager()
+    
+    # Sidebar
     render_sidebar()
     
-    # Main content
-    st.markdown("# 🚀 MCP Data Analysis Client")
-    st.markdown("*Powered by Pandas MCP Server & OpenAI*")
+    # Display current chart if selected
+    if session_manager.get('current_chart_index') is not None:
+        with col1:
+            chart_handler.display_current_chart()
     
-    # Navigation
-    selected_page = render_main_navigation()
+    # Chat input (must be at root level due to Streamlit constraints)
+    if prompt := st.chat_input("Ask about your data...", disabled=not is_ready):
+        handle_user_input(prompt, col1)
+
+
+def handle_user_input(prompt: str, display_column):
+    """Handle user input and process with OpenAI/MCP"""
     
-    st.divider()
+    # Validate state
+    if not session_manager.get('openai_api_key'):
+        st.error("Please enter your OpenAI API key in the sidebar.")
+        return
+        
+    if not session_manager.is_connected():
+        st.error("Please connect to MCP server first.")
+        return
     
-    # Render selected page
-    if "Data Analysis" in selected_page:
-        render_data_analysis_page()
-    elif "Chat Assistant" in selected_page:
-        render_chat_page()
-    elif "File Manager" in selected_page:
-        render_file_manager_page()
+    # Add user message
+    session_manager.add_message("user", prompt)
+    
+    # Display user message
+    with display_column:
+        with st.chat_message("user"):
+            st.write(prompt)
+    
+    # Process with OpenAI
+    with display_column:
+        with st.chat_message("assistant"):
+            process_assistant_response(prompt)
+
+
+def process_assistant_response(user_prompt: str):
+    """Process and display assistant response"""
+    
+    # Initialize OpenAI if needed
+    api_key = session_manager.get('openai_api_key')
+    if not api_key:
+        st.error("OpenAI API key not found")
+        return
+        
+    openai_handler.initialize(api_key)
+    
+    # Prepare messages
+    file_contents = session_manager.get_files()
+    messages = openai_handler.prepare_messages(user_prompt, file_contents)
+    
+    # Get tools
+    tools = session_manager.get_tools()
+    if not tools:
+        st.error("No MCP tools available")
+        return
+    
+    try:
+        # Process with OpenAI
+        response, chart_indices = openai_handler.process_message(
+            messages,
+            tools,
+            file_contents
+        )
+        
+        # Display response
+        st.write(response)
+        
+        # Add to session
+        session_manager.add_message(
+            "assistant",
+            response,
+            {"chart_indices": chart_indices} if chart_indices else None
+        )
+        
+    except Exception as e:
+        error_msg = f"Error processing request: {str(e)}"
+        st.error(error_msg)
+        logger.log("error", error_msg)
+        
+        # Add error to session
+        session_manager.add_message("assistant", f"I encountered an error: {str(e)}")
+
 
 if __name__ == "__main__":
     main()
