@@ -1,4 +1,4 @@
-"""Application settings and configuration management"""
+"""Application settings with secure API key handling"""
 
 import os
 from pathlib import Path
@@ -12,15 +12,15 @@ load_dotenv()
 
 @dataclass
 class Settings:
-    """Application configuration settings"""
+    """Application configuration settings - API keys are NEVER persisted"""
     
     # MCP Server Settings
     mcp_sse_url: str = field(default_factory=lambda: os.getenv("MCP_SSE_URL", "http://119.13.110.147:8000/sse"))
     mcp_timeout: int = field(default_factory=lambda: int(os.getenv("MCP_TIMEOUT", "30")))
     mcp_max_retries: int = field(default_factory=lambda: int(os.getenv("MCP_MAX_RETRIES", "3")))
     
-    # OpenAI Settings
-    openai_api_key: str = field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
+    # OpenAI Settings - SECURITY: Never persist API key
+    # API key should ONLY come from environment or session input, NEVER saved
     openai_model: str = field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o-mini"))
     openai_temperature: float = field(default_factory=lambda: float(os.getenv("OPENAI_TEMPERATURE", "0.7")))
     openai_max_tokens: int = field(default_factory=lambda: int(os.getenv("OPENAI_MAX_TOKENS", "1500")))
@@ -28,7 +28,7 @@ class Settings:
     
     # Application Settings
     app_title: str = field(default_factory=lambda: os.getenv("APP_TITLE", "Pandas Data Chat"))
-    app_icon: str = field(default_factory=lambda: os.getenv("APP_ICON", "📊"))
+    app_icon: str = field(default_factory=lambda: os.getenv("APP_ICON", "🐼"))
     app_layout: str = field(default_factory=lambda: os.getenv("APP_LAYOUT", "wide"))
     
     # File Settings
@@ -42,13 +42,13 @@ class Settings:
     # Logging Settings
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
     log_dir: Path = field(default_factory=lambda: Path(os.getenv("LOG_DIR", "logs")))
-    log_max_bytes: int = field(default_factory=lambda: int(os.getenv("LOG_MAX_BYTES", "10485760")))  # 10MB
+    log_max_bytes: int = field(default_factory=lambda: int(os.getenv("LOG_MAX_BYTES", "10485760")))
     log_backup_count: int = field(default_factory=lambda: int(os.getenv("LOG_BACKUP_COUNT", "5")))
     
     # UI Settings
     sidebar_state: str = field(default_factory=lambda: os.getenv("SIDEBAR_STATE", "expanded"))
     theme: str = field(default_factory=lambda: os.getenv("THEME", "light"))
-    show_debug: bool = field(default_factory=lambda: os.getenv("SHOW_DEBUG", "true").lower() == "true")
+    show_debug: bool = field(default_factory=lambda: os.getenv("SHOW_DEBUG", "false").lower() == "true")
     
     # Chart Settings
     chart_height: int = field(default_factory=lambda: int(os.getenv("CHART_HEIGHT", "500")))
@@ -61,33 +61,58 @@ class Settings:
     
     # Prompt Settings
     prompt_dir: Path = field(default_factory=lambda: Path("config/prompts"))
-    default_prompt_file: str = field(default_factory=lambda: os.getenv("DEFAULT_PROMPT_FILE", "default.txt"))
-    custom_prompt_file: str = field(default_factory=lambda: os.getenv("CUSTOM_PROMPT_FILE", "custom.txt"))
     use_custom_prompt: bool = field(default_factory=lambda: os.getenv("USE_CUSTOM_PROMPT", "false").lower() == "true")
+    
+    # SECURITY: Private property for API key - never saved
+    _openai_api_key: Optional[str] = field(default=None, init=False, repr=False)
     
     def __post_init__(self):
         """Initialize directories after dataclass creation"""
-        # Ensure directories exist
         self.temp_dir.mkdir(parents=True, exist_ok=True)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.prompt_dir.mkdir(parents=True, exist_ok=True)
         (self.temp_dir / "uploads").mkdir(parents=True, exist_ok=True)
-        
+    
+    @property
+    def openai_api_key(self) -> Optional[str]:
+        """Get API key - ONLY from environment, never from storage"""
+        # SECURITY: Only return from environment variable, NEVER from instance storage
+        return os.getenv("OPENAI_API_KEY")
+    
+    @openai_api_key.setter
+    def openai_api_key(self, value: str):
+        """SECURITY: Prevent setting API key on settings object"""
+        # Log warning but don't store
+        import logging
+        logging.warning("Attempted to set API key on settings object - ignored for security")
+        # Do NOT store the value
+        pass
+    
+    def get_openai_api_key_from_env(self) -> Optional[str]:
+        """Safely get API key from environment only"""
+        return os.getenv("OPENAI_API_KEY")
+    
     def update_from_dict(self, config: Dict[str, Any]):
-        """Update settings from dictionary (e.g., from UI)"""
+        """Update settings from dictionary - EXCLUDES API keys"""
         for key, value in config.items():
+            # SECURITY: Never update API key fields
+            if 'api_key' in key.lower() or 'secret' in key.lower():
+                continue
             if hasattr(self, key):
                 setattr(self, key, value)
-                
+    
     def to_dict(self) -> Dict[str, Any]:
-        """Convert settings to dictionary"""
-        return {
-            key: getattr(self, key)
-            for key in self.__dataclass_fields__.keys()
-        }
-        
+        """Convert settings to dictionary - EXCLUDES sensitive data"""
+        result = {}
+        for key in self.__dataclass_fields__.keys():
+            # SECURITY: Exclude API keys and secrets from dict
+            if 'api_key' in key.lower() or 'secret' in key.lower() or key.startswith('_'):
+                continue
+            result[key] = getattr(self, key)
+        return result
+    
     def save_to_env(self, env_file: str = ".env"):
-        """Save current settings to .env file"""
+        """Save settings to .env file - NEVER saves API keys"""
         env_path = Path(env_file)
         
         # Read existing env file
@@ -95,21 +120,20 @@ class Settings:
         if env_path.exists():
             with open(env_path, 'r') as f:
                 existing_lines = f.readlines()
-                
+        
         # Create a dict of existing keys
         existing_keys = {}
         for line in existing_lines:
             if '=' in line and not line.strip().startswith('#'):
                 key = line.split('=')[0].strip()
                 existing_keys[key] = line
-                
-        # Update or add new values
-        new_lines = []
+        
+        # Settings to save - EXCLUDES API KEYS
         settings_dict = {
             "MCP_SSE_URL": self.mcp_sse_url,
             "MCP_TIMEOUT": str(self.mcp_timeout),
             "MCP_MAX_RETRIES": str(self.mcp_max_retries),
-            "OPENAI_API_KEY": self.openai_api_key,
+            # SECURITY: NEVER save OPENAI_API_KEY
             "OPENAI_MODEL": self.openai_model,
             "OPENAI_TEMPERATURE": str(self.openai_temperature),
             "OPENAI_MAX_TOKENS": str(self.openai_max_tokens),
@@ -132,50 +156,23 @@ class Settings:
             "MAX_CHARTS_STORED": str(self.max_charts_stored),
             "MESSAGE_HISTORY_LIMIT": str(self.message_history_limit),
             "CONTEXT_WINDOW": str(self.context_window),
-            "DEFAULT_PROMPT_FILE": self.default_prompt_file,
-            "CUSTOM_PROMPT_FILE": self.custom_prompt_file,
             "USE_CUSTOM_PROMPT": str(self.use_custom_prompt).lower()
         }
         
         # Build new env file content
+        new_lines = []
         for key, value in settings_dict.items():
-            if key in existing_keys:
-                # Update existing
-                new_lines.append(f"{key}={value}\n")
-            else:
-                # Add new
-                new_lines.append(f"{key}={value}\n")
-                
-        # Add back any existing keys not in our settings
-        for key, line in existing_keys.items():
-            if key not in settings_dict:
-                new_lines.append(line)
-                
+            new_lines.append(f"{key}={value}\n")
+        
+        # Preserve existing API key line if it exists (user added it manually)
+        if "OPENAI_API_KEY" in existing_keys:
+            # Keep the existing line but commented out with warning
+            new_lines.append("# OPENAI_API_KEY should be set as environment variable, not in file\n")
+            new_lines.append("# " + existing_keys["OPENAI_API_KEY"])
+        
         # Write back
         with open(env_path, 'w') as f:
             f.writelines(new_lines)
-            
-    def validate(self) -> tuple[bool, list[str]]:
-        """Validate settings and return (is_valid, errors)"""
-        errors = []
-        
-        # Check required fields
-        if not self.mcp_sse_url:
-            errors.append("MCP_SSE_URL is required")
-            
-        # Check file size limit
-        if self.max_file_size_mb <= 0:
-            errors.append("MAX_FILE_SIZE_MB must be positive")
-            
-        # Check OpenAI settings if key provided
-        if self.openai_api_key and not self.openai_api_key.startswith("sk-"):
-            errors.append("Invalid OpenAI API key format")
-            
-        # Check paths exist
-        if not self.prompt_dir.exists():
-            errors.append(f"Prompt directory does not exist: {self.prompt_dir}")
-            
-        return len(errors) == 0, errors
 
 
 # Global settings instance
@@ -188,12 +185,12 @@ def get_settings() -> Settings:
     
     if _settings is None:
         _settings = Settings()
-        
+    
     return _settings
 
 
 def reset_settings():
-    """Reset settings to defaults"""
+    """Reset settings to defaults - clears everything"""
     global _settings
     _settings = Settings()
     return _settings
